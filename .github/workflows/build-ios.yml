@@ -1,0 +1,51 @@
+name: Build iOS (Unsigned IPA)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # اختياري: لو في Swift Packages
+      - name: Resolve Swift Packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Loadify.xcodeproj -scheme Loadify
+
+      # لو فيه CocoaPods (ملف Podfile)، الغي الكومنت عن 3 خطوات الجاية:
+      # - name: Install CocoaPods
+      #   run: sudo gem install cocoapods
+      # - name: Pod Install
+      #   run: pod install --repo-update
+      # وخلي كل أوامر xcodebuild تستخدم -workspace بدل -project
+
+      - name: Archive (no code signing)
+        run: |
+          set -e
+          xcodebuild \
+            -project Loadify.xcodeproj \
+            -scheme Loadify \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath $PWD/build/Loadify.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Package unsigned IPA
+        run: |
+          set -e
+          APP_PATH=$(find "$PWD/build/Loadify.xcarchive/Products/Applications" -name "*.app" | head -n 1)
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r Loadify-unsigned.ipa Payload
+          rm -rf Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Loadify-unsigned
+          path: Loadify-unsigned.ipa
